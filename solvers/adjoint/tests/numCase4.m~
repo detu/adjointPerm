@@ -5,7 +5,7 @@
 
 % TO DO : 1. Include SCALING !!!
 %         2. Add more wells
-%         3. 
+%         3. Change time scale not 1 time control interval !
 
 clear, clc;
 warning off all;
