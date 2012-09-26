@@ -1,0 +1,433 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+   <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   
+      <!--
+This HTML is auto-generated from an M-file.
+To make changes, update the M-file and republish this document.
+      -->
+      <title>Basic Transport-Solver Tutorial</title>
+      <meta name="generator" content="MATLAB 7.7">
+      <meta name="date" content="2009-05-08">
+      <meta name="m-file" content="simple2phWellExample"><style type="text/css">
+
+body {
+  background-color: white;
+  margin:10px;
+}
+
+h1 {
+  color: #990000; 
+  font-size: x-large;
+}
+
+h2 {
+  color: #990000;
+  font-size: medium;
+}
+
+/* Make the text shrink to fit narrow windows, but not stretch too far in 
+wide windows. */ 
+p,h1,h2,div.content div {
+  max-width: 600px;
+  /* Hack for IE6 */
+  width: auto !important; width: 600px;
+}
+
+pre.codeinput {
+  background: #EEEEEE;
+  padding: 10px;
+}
+@media print {
+  pre.codeinput {word-wrap:break-word; width:100%;}
+} 
+
+span.keyword {color: #0000FF}
+span.comment {color: #228B22}
+span.string {color: #A020F0}
+span.untermstring {color: #B20000}
+span.syscmd {color: #B28C00}
+
+pre.codeoutput {
+  color: #666666;
+  padding: 10px;
+}
+
+pre.error {
+  color: red;
+}
+
+p.footer {
+  text-align: right;
+  font-size: xx-small;
+  font-weight: lighter;
+  font-style: italic;
+  color: gray;
+}
+
+  </style></head>
+   <body>
+      <div class="content">
+         <h1>Basic Transport-Solver Tutorial</h1>
+         <!--introduction-->
+         <p>Consider a two-phase oil-water problem. Solve the two-phase pressure equation</p>
+         <p><img src="simple2phWellExample_eq75391.png" alt="$$\nabla\cdot v = q, \qquad v=\textbf{--}\lambda K\nabla p,$$"></p>
+         <p>where v is the Darcy velocity (total velocity) and lambda is the mobility, which depends on the water saturation S.</p>
+         <p>The saturation equation (conservation of the water phase) is given as:</p>
+         <p><img src="simple2phWellExample_eq33173.png" alt="$$ \phi \frac{\partial S}{\partial t} +     \nabla \cdot (f_w(S) v) = q_w$$"></p>
+         <p>where phi is the rock porosity, f is the Buckley-Leverett fractional flow function, and q_w is the water source term.</p>
+         <p><html> This is a continuation of the <a href="../../1ph/html/simpleBC.html">basic flow-solver tutorial</a>, in which we solved
+            the corresponding single-phase problem using the mimetic pressure solver. Here, we demonstrate how this flow solver can be
+            extended by an explicit or an implicit two-phase transport solver. The grid is Cartesian with isotropic, homogeneous permeability.
+            See the <a href="../../1ph/html/simpleBC.html">basic flow-solver tutorial</a> for more details on the grid structure, the
+            structure used to hold the solutions, etc. </html>
+         </p>
+         <!--/introduction-->
+         <h2>Contents</h2>
+         <div>
+            <ul>
+               <li><a href="#1">Define geometry and rock parameters</a></li>
+               <li><a href="#2">Define the two-phase fluid model</a></li>
+               <li><a href="#4">Initialize and construct linear system</a></li>
+               <li><a href="#5">Introduce wells</a></li>
+               <li><a href="#7">Solve initial pressure in reservoir</a></li>
+               <li><a href="#9">Transport loop</a></li>
+               <li><a href="#11">Start the main loop</a></li>
+            </ul>
+         </div>
+         <h2>Define geometry and rock parameters<a name="1"></a></h2>
+         <p>Construct a Cartesian grid of size 20-by-20-by-5 cells, where each cell has dimension 1-by-1-by-1. Set the permeability <img src="simple2phWellExample_eq14888.png" alt="$K$"> to be homogeneous, isotropic and equal 100 mD and the porosity to be equal to 0.3.
+         </p><pre class="codeinput">nx = 20; ny = 20; nz = 5;
+G = cartGrid([nx, ny, nz]);
+G = computeGeometry(G);
+rock.perm  = repmat(100*milli*darcy, [G.cells.num, 1]);
+rock.poro  = repmat(0.3, [G.cells.num, 1]);
+</pre><h2>Define the two-phase fluid model<a name="2"></a></h2>
+         <p>The <a href="matlab:help('initSimpleFluid')">two-phase fluid model</a> has default values:
+         </p>
+         <div>
+            <ul>
+               <li>densities: [rho_w, rho_o] = [1000 700] kg/m^3</li>
+               <li>viscosities: [mu_w, mu_o] = [1 10] cP.</li>
+            </ul>
+         </div><pre class="codeinput">fluid      = initSimpleFluid();
+</pre><p>The fluid model represented by the <a href="matlab:help('fluid')">fluid structure</a> is the two-phase incompressible counterpart to the fluid model of the Black Oil <a href="matlab:help('pvt')">'pvt'</a> function. For generality, the argument to all member functions is assumed to be a structure that contains (at least) a saturation
+            field. Therefore, to plot the relative permeability, one needs to do as follows
+         </p><pre class="codeinput">S.s=linspace(0,1,20)'; kr=fluid.kr(S); <span class="comment">%temporary structure</span>
+plot(S.s,kr(:,1), <span class="string">'b'</span>, S.s,kr(:,2), <span class="string">'r'</span>);
+title(<span class="string">'Relative permeability curves'</span>)
+legend(<span class="string">'Water'</span>,<span class="string">'Oil'</span>,<span class="string">'Location'</span>,<span class="string">'Best'</span>)
+</pre><img vspace="5" hspace="5" src="simple2phWellExample_01.png" alt=""> <h2>Initialize and construct linear system<a name="4"></a></h2>
+         <p>Initialize solution structure with reservoir pressure equal 0 and initial water saturation equal 0.0 (reservoir is filled
+            with oil). Compute the mimetic inner product from input grid and rock properties.
+         </p><pre class="codeinput">rSol = initResSol(G, 0.0, 0.0);
+S  = computeMimeticIP(G, rock, <span class="string">'Verbose'</span>, true);
+</pre><pre class="codeoutput">Using inner product: 'ip_simple'.
+Computing component matrices C and D ...	Elapsed time is 0.001030 seconds.
+Computing cell inner products ...		Elapsed time is 0.205651 seconds.
+Assembling global inner product matrix ...	Elapsed time is 0.002808 seconds.
+</pre><h2>Introduce wells<a name="5"></a></h2>
+         <p><html> We will include two wells, one rate-controlled vertical well and one horizontal well controlled by bottom-hole pressure.
+            Wells are described using a Peacemann model, giving an extra set of equations that need to be assembled, see <a href="../../1ph/html/simpleWellExample.html#3">
+            "Using Peacemann well models"</a> for more details. </html>
+         </p><pre class="codeinput">W = addWell(G, rock, [], 1 : nx*ny : nx*ny*nz,          <span class="keyword">...</span>
+            <span class="string">'Type'</span>, <span class="string">'rate'</span>, <span class="string">'Val'</span>, 1.0/day(), <span class="keyword">...</span>
+            <span class="string">'Radius'</span>, 0.1, <span class="string">'Comp_i'</span>,[ 1, 0, 0]);
+W = addWell(G, rock,  W, nx : ny : nx*ny, <span class="keyword">...</span>
+            <span class="string">'Type'</span>, <span class="string">'bhp'</span> , <span class="string">'Val'</span>, 1.0e5, <span class="keyword">...</span>
+            <span class="string">'Radius'</span>, 0.1, <span class="string">'Dir'</span>, <span class="string">'y'</span>);
+
+<span class="comment">% To check if the wells are placed as we wanted them, we plot them</span>
+clf
+plotGrid(G, <span class="string">'FaceColor'</span>, <span class="string">'none'</span>); view(3);
+[ht, htxt, hs] = plotWell(G, W, <span class="string">'radius'</span>, 0.1, <span class="string">'height'</span>, 2);
+set(htxt, <span class="string">'FontSize'</span>, 16);
+</pre><img vspace="5" hspace="5" src="simple2phWellExample_02.png" alt=""> <p>Once the wells are added, we can generate the components of the linear system corresponding to the two wells and initialize
+            the solution structure (with correct bhp)
+         </p><pre class="codeinput">wSol = initWellSol(W, 1.0*barsa());
+</pre><h2>Solve initial pressure in reservoir<a name="7"></a></h2>
+         <p>Solve linear system construced from S and W to obtain solution for flow and pressure in the reservoir and the wells.</p><pre class="codeinput">gravity <span class="string">off</span>
+[rSol, wSol] = solveIncompFlow(rSol, wSol, G, S, fluid, <span class="string">'wells'</span>, W);
+</pre><p>Report initial state of reservoir</p><pre class="codeinput">subplot(2,1,1), cla
+   plotCellData(G, convertTo(rSol.cellPressure, barsa));
+   title(<span class="string">'Initial pressure'</span>), view(3)
+
+subplot(2,1,2), cla
+   cellNo = rldecode(1:G.cells.num, double(G.cells.numFaces), 2) .';
+   plotCellData(G, accumarray(cellNo, <span class="keyword">...</span>
+                abs(convertTo(rSol.cellFlux, meter^3/day))));
+   title(<span class="string">'Initial flux intensity'</span>), view(3)
+</pre><img vspace="5" hspace="5" src="simple2phWellExample_03.png" alt=""> <h2>Transport loop<a name="9"></a></h2>
+         <p>We solve the two-phase system using a sequential splitting in which the pressure and fluxes are computed by solving the flow
+            equation and then held fixed as the saturation is advanced according to the transport equation. This procedure is repeated
+            for a given number of time steps (here we use 15 equally spaced time steps). The error introduced by this splitting of flow
+            and transport can be reduced by iterating each time step until e.g., the residual is below a certain user-prescribed threshold
+            (this is not done herein).
+         </p><pre class="codeinput">T      = 300*day();
+dT     = T/15;
+dTplot = 100*day();  <span class="comment">% plot only every 100th day</span>
+N      = fix(T/dTplot);
+pv     = poreVolume(G,rock);
+</pre><p>The transport equation will be solved by the single-point upstream method with either explicit or implicit time discretizations.
+            Both schemes may use internal time steps to obtain a stable discretization. To represent the two solutions, we create new
+            solution objects to be used by the solver with implicit transport step.
+         </p><pre class="codeinput">rISol = rSol;
+wISol = wSol;
+</pre><h2>Start the main loop<a name="11"></a></h2><pre class="codeinput">t  = 0; plotNo = 1; hi = <span class="string">'Implicit: '</span>; he = <span class="string">'Explicit: '</span>;
+e = []; pi = []; pe = [];
+<span class="keyword">while</span> t &lt; T,
+   rSol = explicitTransport(rSol, wSol, G, dT, rock, fluid, <span class="string">'wells'</span>, W);
+   rISol = implicitTransport(rISol, wISol, G, dT, rock, fluid, <span class="string">'wells'</span>, W);
+
+   <span class="comment">% Check for inconsistent saturations</span>
+   assert(max([rSol.s; rISol.s]) &lt; 1+eps &amp;&amp; min([rSol.s; rISol.s]) &gt; -eps);
+
+   <span class="comment">% Update solution of pressure equation.</span>
+   [rSol, wSol] = solveIncompFlow(rSol, wSol, G, S, fluid, <span class="string">'wells'</span>, W);
+   [rISol, wISol] = solveIncompFlow(rISol, wISol, G, S, fluid, <span class="string">'wells'</span>, W);
+
+   <span class="comment">% Measure water saturation in production cells in saturation</span>
+   e = [e; sum(abs(rSol.s - rISol.s).*pv)/sum(pv)]; <span class="comment">%#ok</span>
+   pe = [pe; rSol.s(W(2).cells)' ];                 <span class="comment">%#ok</span>
+   pi = [pi; rISol.s(W(2).cells)'];                 <span class="comment">%#ok</span>
+
+   <span class="comment">% Increase time and continue if we do not want to plot saturations</span>
+   t = t + dT;
+   <span class="keyword">if</span> ( t &lt; plotNo*dTplot &amp;&amp; t &lt;T), <span class="keyword">continue</span>, <span class="keyword">end</span>
+
+   <span class="comment">% Plot saturation</span>
+   heading = [num2str(convertTo(t,day)),  <span class="string">' days'</span>];
+   r = 0.01;
+   subplot(<span class="string">'position'</span>,[(plotNo-1)/N+r, 0.50, 1/N-2*r, 0.48]), cla
+   plotCellData(G, rSol.s);
+   view(60,50), axis <span class="string">equal</span> <span class="string">off</span>, title([he heading])
+
+   subplot(<span class="string">'position'</span>,[(plotNo-1)/N+r, 0.02, 1/N-2*r, 0.48]), cla
+   plotCellData(G, rISol.s);
+   view(60,50), axis <span class="string">equal</span> <span class="string">off</span>, title([hi heading])
+
+   plotNo = plotNo+1;
+<span class="keyword">end</span>
+</pre><img vspace="5" hspace="5" src="simple2phWellExample_04.png" alt=""> <p>As we clearly can see from the plots in the figure, the implicit scheme has much more numerical diffusion than the explicit
+            scheme early in the simulation, but as the time increase, the difference is smaller. To verify this, we can plot the error
+            or the breakthrough curves
+         </p><pre class="codeinput">n = size(pe,1);
+subplot(1,2,1),
+   plot(1:n,e*100,<span class="string">'-o'</span>), title(<span class="string">'Percentage saturation discrepancy'</span>)
+subplot(1,2,2),
+   plot(1:n,pe(:,1),<span class="string">'-o'</span>,1:n,pi(:,1),<span class="string">'--*'</span>)
+   legend(<span class="string">'Explicit'</span>,<span class="string">'Implicit'</span>,<span class="string">'Location'</span>,<span class="string">'Best'</span>);
+   title(<span class="string">'Water breakthrough at heel'</span>);
+</pre><img vspace="5" hspace="5" src="simple2phWellExample_05.png" alt=""> <p>#COPYRIGHT_EXAMPLE#</p>
+         <p><html> <font size="-1">   Last time modified:   $Id: simple2phWellExample.m 2071 2009-04-21 17:23:25Z bska $ </font> </html></p>
+         <p class="footer"><br>
+            Published with MATLAB&reg; 7.7<br></p>
+      </div>
+      <!--
+##### SOURCE BEGIN #####
+%% Basic Transport-Solver Tutorial
+% Consider a two-phase oil-water problem. Solve the two-phase pressure equation
+%
+% $$\nabla\cdot v = q, \qquad v=\textbf{REPLACE_WITH_DASH_DASH}\lambda K\nabla p,$$
+%
+% where v is the Darcy velocity (total velocity) and lambda is the
+% mobility, which depends on the water saturation S.
+%
+% The saturation equation (conservation of the water phase) is given as:
+%
+% $$ \phi \frac{\partial S}{\partial t} +
+%     \nabla \cdot (f_w(S) v) = q_w$$
+%
+% where phi is the rock porosity, f is the Buckley-Leverett fractional
+% flow function, and q_w is the water source term.
+%
+% <html>
+% This is a continuation of the <a
+% href="../../1ph/html/simpleBC.html">basic flow-solver tutorial</a>, in
+% which we solved the corresponding single-phase problem using the mimetic
+% pressure solver. Here, we demonstrate how this flow solver can be
+% extended by an explicit or an implicit two-phase transport solver. The
+% grid is Cartesian with isotropic, homogeneous permeability. See the <a
+% href="../../1ph/html/simpleBC.html">basic flow-solver tutorial</a> for
+% more details on the grid structure, the structure used to hold the
+% solutions, etc.
+% </html>
+
+
+%% Define geometry and rock parameters
+% Construct a Cartesian grid of size 20-by-20-by-5 cells, where each cell
+% has dimension 1-by-1-by-1. Set the permeability $K$ to be homogeneous,
+% isotropic and equal 100 mD and the porosity to be equal to 0.3.
+nx = 20; ny = 20; nz = 5;
+G = cartGrid([nx, ny, nz]);
+G = computeGeometry(G);
+rock.perm  = repmat(100*milli*darcy, [G.cells.num, 1]);
+rock.poro  = repmat(0.3, [G.cells.num, 1]);
+
+%% Define the two-phase fluid model
+% The <matlab:help('initSimpleFluid') two-phase fluid model> has default values:
+%
+% * densities: [rho_w, rho_o] = [1000 700] kg/m^3
+% * viscosities: [mu_w, mu_o] = [1 10] cP.
+fluid      = initSimpleFluid();
+
+%%
+% The fluid model represented by the <matlab:help('fluid') fluid structure>
+% is the two-phase incompressible counterpart to the fluid model of the
+% Black Oil <matlab:help('pvt') 'pvt'> function. For generality, the
+% argument to all member functions is assumed to be a structure that
+% contains (at least) a saturation field. Therefore, to plot the relative
+% permeability, one needs to do as follows
+%
+S.s=linspace(0,1,20)'; kr=fluid.kr(S); %temporary structure
+plot(S.s,kr(:,1), 'b', S.s,kr(:,2), 'r');
+title('Relative permeability curves')
+legend('Water','Oil','Location','Best')
+
+
+%% Initialize and construct linear system
+% Initialize solution structure with reservoir pressure equal 0 and initial
+% water saturation equal 0.0 (reservoir is filled with oil). Compute the
+% mimetic inner product from input grid and rock properties.
+rSol = initResSol(G, 0.0, 0.0);
+S  = computeMimeticIP(G, rock, 'Verbose', true);
+
+%% Introduce wells
+% <html>
+% We will include two wells, one rate-controlled vertical well and one
+% horizontal well controlled by bottom-hole pressure. Wells are described
+% using a Peacemann model, giving an extra set of equations that need to be
+% assembled, see <a href="../../1ph/html/simpleWellExample.html#3"> "Using
+% Peacemann well models"</a> for more details.
+% </html>
+W = addWell(G, rock, [], 1 : nx*ny : nx*ny*nz,          ...
+            'Type', 'rate', 'Val', 1.0/day(), ...
+            'Radius', 0.1, 'Comp_i',[ 1, 0, 0]);
+W = addWell(G, rock,  W, nx : ny : nx*ny, ...
+            'Type', 'bhp' , 'Val', 1.0e5, ...
+            'Radius', 0.1, 'Dir', 'y');
+
+% To check if the wells are placed as we wanted them, we plot them
+clf
+plotGrid(G, 'FaceColor', 'none'); view(3);
+[ht, htxt, hs] = plotWell(G, W, 'radius', 0.1, 'height', 2);
+set(htxt, 'FontSize', 16);
+
+%%
+% Once the wells are added, we can generate the components of the linear
+% system corresponding to the two wells and initialize the solution
+% structure (with correct bhp)
+wSol = initWellSol(W, 1.0*barsa());
+
+%% Solve initial pressure in reservoir
+% Solve linear system construced from S and W to obtain solution for flow
+% and pressure in the reservoir and the wells.
+gravity off
+[rSol, wSol] = solveIncompFlow(rSol, wSol, G, S, fluid, 'wells', W);
+
+%%
+% Report initial state of reservoir
+subplot(2,1,1), cla
+   plotCellData(G, convertTo(rSol.cellPressure, barsa));
+   title('Initial pressure'), view(3)
+
+subplot(2,1,2), cla
+   cellNo = rldecode(1:G.cells.num, double(G.cells.numFaces), 2) .';
+   plotCellData(G, accumarray(cellNo, ...
+                abs(convertTo(rSol.cellFlux, meter^3/day))));
+   title('Initial flux intensity'), view(3)
+
+%% Transport loop
+% We solve the two-phase system using a sequential splitting in which the
+% pressure and fluxes are computed by solving the flow equation and then
+% held fixed as the saturation is advanced according to the transport
+% equation. This procedure is repeated for a given number of time steps
+% (here we use 15 equally spaced time steps). The error introduced by this
+% splitting of flow and transport can be reduced by iterating each time
+% step until e.g., the residual is below a certain user-prescribed
+% threshold (this is not done herein).
+T      = 300*day();
+dT     = T/15;
+dTplot = 100*day();  % plot only every 100th day
+N      = fix(T/dTplot);
+pv     = poreVolume(G,rock);
+
+%%
+% The transport equation will be solved by the single-point upstream method
+% with either explicit or implicit time discretizations. Both schemes may
+% use internal time steps to obtain a stable discretization. To represent
+% the two solutions, we create new solution objects to be used by the
+% solver with implicit transport step.
+rISol = rSol;
+wISol = wSol;
+
+%% Start the main loop
+t  = 0; plotNo = 1; hi = 'Implicit: '; he = 'Explicit: ';
+e = []; pi = []; pe = [];
+while t < T,
+   rSol = explicitTransport(rSol, wSol, G, dT, rock, fluid, 'wells', W);
+   rISol = implicitTransport(rISol, wISol, G, dT, rock, fluid, 'wells', W);
+
+   % Check for inconsistent saturations
+   assert(max([rSol.s; rISol.s]) < 1+eps && min([rSol.s; rISol.s]) > -eps);
+
+   % Update solution of pressure equation.
+   [rSol, wSol] = solveIncompFlow(rSol, wSol, G, S, fluid, 'wells', W);
+   [rISol, wISol] = solveIncompFlow(rISol, wISol, G, S, fluid, 'wells', W);
+
+   % Measure water saturation in production cells in saturation
+   e = [e; sum(abs(rSol.s - rISol.s).*pv)/sum(pv)]; %#ok
+   pe = [pe; rSol.s(W(2).cells)' ];                 %#ok
+   pi = [pi; rISol.s(W(2).cells)'];                 %#ok
+
+   % Increase time and continue if we do not want to plot saturations
+   t = t + dT;
+   if ( t < plotNo*dTplot && t <T), continue, end
+
+   % Plot saturation
+   heading = [num2str(convertTo(t,day)),  ' days'];
+   r = 0.01;
+   subplot('position',[(plotNo-1)/N+r, 0.50, 1/N-2*r, 0.48]), cla
+   plotCellData(G, rSol.s);
+   view(60,50), axis equal off, title([he heading])
+
+   subplot('position',[(plotNo-1)/N+r, 0.02, 1/N-2*r, 0.48]), cla
+   plotCellData(G, rISol.s);
+   view(60,50), axis equal off, title([hi heading])
+
+   plotNo = plotNo+1;
+end
+
+%%
+% As we clearly can see from the plots in the figure, the implicit scheme
+% has much more numerical diffusion than the explicit scheme early in the
+% simulation, but as the time increase, the difference is smaller. To
+% verify this, we can plot the error or the breakthrough curves
+%
+n = size(pe,1);
+subplot(1,2,1),
+   plot(1:n,e*100,'-o'), title('Percentage saturation discrepancy')
+subplot(1,2,2),
+   plot(1:n,pe(:,1),'-o',1:n,pi(:,1),'REPLACE_WITH_DASH_DASH*')
+   legend('Explicit','Implicit','Location','Best');
+   title('Water breakthrough at heel');
+
+%%
+% #COPYRIGHT_EXAMPLE#
+
+%%
+% <html>
+% <font size="-1">
+%   Last time modified:
+%   $Id: simple2phWellExample.m 2071 2009-04-21 17:23:25Z bska $
+% </font>
+% </html>
+displayEndOfDemoMessage(mfilename)
+
+##### SOURCE END #####
+-->
+   </body>
+</html>

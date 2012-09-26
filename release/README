@@ -1,0 +1,62 @@
+Overview of Release Process
+===========================
+
+  * Extract fresh, un-SVN'ed sources into clean directory:
+    svnroot=http://svn.math.sintef.no/simmatlab/tags
+    release=1.0
+    svn export ${svnroot}/mrst/${release}/        mrst-${release}
+    svn export ${svnroot}/mrst-publish/${release} mrst-publish-${release}
+
+  * Extract subset of files corresponding to release:
+    cd mrst-${release}/release
+    python bin/export.py
+
+  * Link in documentation from a previous PUBLISH run:
+    cd ../../mrst-publish-${release}
+    sh ./link_doc.sh ../mrst-${release}/release/export
+    cd ../mrst-${release}/release
+
+  * Make "overlap figures" to aid explanation of overlapping basis functions:
+    ln -s export/examples/1ph/html ../examples/1ph/html
+    (cd ..; matlab -nodesktop -r 'startup, makeOverlapFigs, quit')
+
+  * Install simplified startup.m:
+    rm -f export/startup.m
+    sed 's-^ *--' > export/startup.m <<EOF
+    %Amend MATLAB PATH to handle MRST implementation.
+
+    %{
+    #COPYRIGHT#
+    %}
+
+    cd utils
+    addpath(genpath(ROOTDIR))
+    cd ..
+EOF
+    cd export
+
+  * Build 'Contents.m' (manual process):
+    (cd ../..;
+     for f in `find . -name Contents.m | grep -v export`; do
+       cp -v ${f} ./release/export/${f};
+     done)
+    for d in <all directories>; do 'MATLAB Contents Report'; done
+
+  * Insert copyright notice throughout package:
+    cd export
+    { for f in `find -L . -name '*.m'   \
+                       -o -name '*.xml' \
+                       -o -name '*.html'`; do
+        echo "sed -f ../bin/insert_copyright.sed $f > ${f}.new"
+        echo mv ${f}.new ${f}
+      done; } | sh -x
+
+  * Package results
+    cd ..
+    ln -s export mrst-${release}
+    tar zhcvf mrst-${release}.tar.gz  mrst-${release}
+    rm mrst-${release}
+
+  * Remove remnants of release directory (if desired)
+    cd ../..
+    rm -R mrst-${release} mrst-publish-${release}

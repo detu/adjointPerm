@@ -1,0 +1,71 @@
+
+NECESSARY IMPLEMENTATION:
+
+* processing of eclipse files: 
+
+  1. wells
+
+  2. verify that grid processing gives normals neighbors(:,1) ->
+  neighbors(:,2)
+
+
+  3. update readEclipseFile.m
+
+
+CLEAN UP:
+
+* remove all "links" to black-oil, like z in the resSol structure. 
+
+* look at default behaviour, should not do "things" (such as put
+  default saturation) unless user specifically asks for it. 
+
+* make comment in fluid object with example on how to plot relative
+  perm. 
+
+* code should follow coding standard
+
+* check documentation in all files. Add examples in the documentation
+  (like in the Matlab documentation. )
+
+* add comments in difficult parts of the code. Abbreviate code in
+  comments (write easier but slower/longer code in comments)
+
+* remove use of single-precision.
+
+
+MAKE EXAMPLES: 
+
+* write simple examples
+  - how to construct a grid
+  - how to initialize perm field
+  - how to construct the system 
+
+* make an example that does simulation directly without (as far as
+  possible) black-box functions 
+
+* write detailed comments in all examples
+
+* add teaser-examples
+
+
+TESTING:
+
+* test against gprs
+
+* quarter five spot
+
+* linear pressure drop
+
+
+RELEASE: 
+
+* talk to Trond about their server + password/email
+
+
+NICE:
+
+* compatibility with octave
+
+* compatibility with older Matlab versions.
+
+

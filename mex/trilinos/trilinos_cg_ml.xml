@@ -1,0 +1,27 @@
+<?xml version = '1.0' encoding = 'ISO-8859-1'?>
+<ParameterGroup name="trilinos_cg_ml" id="root">
+    <Parameter type="string" name="solver_library"                 value="trilinos"/>
+    <!---->
+    <Parameter type="string" name="solver_type"                    value="CG"/>
+    <Parameter type="bool"   name="use_multilevel_preconditioner"  value="true"/>
+    <Parameter type="bool"   name="estimate condition number"      value="false"/>
+    <Parameter type="int"    name="solver output"                  value="0"/>
+    <Parameter type="int"    name="maximum iterations"             value="1000"/>
+    <Parameter type="double" name="tolerance"                      value="1e-10"/>
+    <!---->
+    <Parameter type="int"    name="output"                         value="0"/>
+    <Parameter type="int"    name="cycle applications"             value="1"/>
+    <Parameter type="int"    name="max levels"                     value="5"/>
+    <Parameter type="string" name="increasing or decreasing"       value="increasing"/>
+    <Parameter type="double" name="aggregation: threshold"         value="0.06"/>
+    <Parameter type="string" name="aggregation: type"              value="MIS"/>
+    <Parameter type="double" name="aggregation: damping factor"    value="1.33"/>
+    <Parameter type="bool"   name="aggregation: symmetrize"        value="true"/>
+    <Parameter type="string" name="smoother: type"                 value="MLS"/>
+    <Parameter type="string" name="smoother: pre or post"          value="both"/>
+    <Parameter type="int"    name="smoother: sweeps"               value="4"/>
+    <Parameter type="int"    name="smoother: MLS polynomial order" value="3"/>
+    <Parameter type="int"    name="coarse: max size"               value="16"/>
+    <Parameter type="string" name="coarse: type"                   value="symmetric Gauss-Seidel"/>
+    <Parameter type="int"    name="coarse: sweeps"                 value="1"/>
+</ParameterGroup>

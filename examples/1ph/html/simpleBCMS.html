@@ -1,0 +1,419 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+   <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   
+      <!--
+This HTML is auto-generated from an M-file.
+To make changes, update the M-file and republish this document.
+      -->
+      <title>Multiscale Pressure Solver: Flow Driven by Dirichlet and Neumann Boundary Conditions</title>
+      <meta name="generator" content="MATLAB 7.7">
+      <meta name="date" content="2009-03-16">
+      <meta name="m-file" content="simpleBCMS"><style type="text/css">
+
+body {
+  background-color: white;
+  margin:10px;
+}
+
+h1 {
+  color: #990000; 
+  font-size: x-large;
+}
+
+h2 {
+  color: #990000;
+  font-size: medium;
+}
+
+/* Make the text shrink to fit narrow windows, but not stretch too far in 
+wide windows. */ 
+p,h1,h2,div.content div {
+  max-width: 600px;
+  /* Hack for IE6 */
+  width: auto !important; width: 600px;
+}
+
+pre.codeinput {
+  background: #EEEEEE;
+  padding: 10px;
+}
+@media print {
+  pre.codeinput {word-wrap:break-word; width:100%;}
+} 
+
+span.keyword {color: #0000FF}
+span.comment {color: #228B22}
+span.string {color: #A020F0}
+span.untermstring {color: #B20000}
+span.syscmd {color: #B28C00}
+
+pre.codeoutput {
+  color: #666666;
+  padding: 10px;
+}
+
+pre.error {
+  color: red;
+}
+
+p.footer {
+  text-align: right;
+  font-size: xx-small;
+  font-weight: lighter;
+  font-style: italic;
+  color: gray;
+}
+
+  </style></head>
+   <body>
+      <div class="content">
+         <h1>Multiscale Pressure Solver: Flow Driven by Dirichlet and Neumann Boundary Conditions</h1>
+         <!--introduction-->
+         <p>Compare the fine-grid and the multiscale pressure solver by solving the single-phase pressure equation</p>
+         <p><img src="simpleBCMS_eq25293.png" alt="$$\nabla\cdot v = q, \qquad v=\textbf{--}\frac{K}{\mu}\nabla p,$$"></p>
+         <p>for a Cartesian grid with lognormal, anisotropic permeability. This example is built upon <a href="simpleBC.html">simpleBC.html</a>.
+         </p>
+         <!--/introduction-->
+         <h2>Contents</h2>
+         <div>
+            <ul>
+               <li><a href="#1">Define and visualize the model</a></li>
+               <li><a href="#2">Partition the grid</a></li>
+               <li><a href="#4">Assemble linear systems</a></li>
+               <li><a href="#7">Solve the global flow problems</a></li>
+               <li><a href="#8">Plot solution</a></li>
+               <li><a href="#9">Plot Schur complement matrices</a></li>
+            </ul>
+         </div>
+         <h2>Define and visualize the model<a name="1"></a></h2>
+         <p>We construct the Cartesian grid, set a lognormal anisotropic permeability with mean equal [1000 100 10] mD, and use the default
+            single-phase fluid with unit viscosity
+         </p><pre class="codeinput">verbose = true;
+nx = 10; ny = 10; nz = 4;
+Nx =  5; Ny =  5; Nz = 2;
+
+G         = cartGrid([nx, ny, nz]);
+G         = computeGeometry(G);
+K         = logNormLayers([nx, ny, nz], 1); K = 100 * K / mean(K(:));
+rock.perm = bsxfun(@times, [10, 1, 0.1], K .* milli()*darcy());
+fluid     = initSingleFluid();
+gravity <span class="string">off</span>
+
+<span class="comment">% Set boundary conditions: a flux of 1 m^3/day on the global left-hand</span>
+<span class="comment">% side Dirichlet boundary conditions p = 0 on the global right-hand side of</span>
+<span class="comment">% the grid, respectively.</span>
+bc = fluxside([], G, <span class="string">'LEFT'</span>,  1:ny, 1:nz, 1*meter()^3/day());
+bc = pside   (bc, G, <span class="string">'RIGHT'</span>, 1:ny, 1:nz,         0        );
+
+<span class="comment">% After the grid structure is generated, we plot the permeability and the</span>
+<span class="comment">% geometry</span>
+figure;
+   plotCellData(G,log10(rock.perm(:,1)) ); shading <span class="string">faceted</span>;
+   title(<span class="string">'Log_{10} of x-permeability [mD]'</span>);
+   view(3), camproj <span class="string">perspective</span>, axis <span class="string">tight</span> <span class="string">off</span>
+   h = colorbar; c = round(caxis); c = c(1) : c(2);
+   set(h, <span class="string">'YTick'</span>, c, <span class="string">'YTickLabel'</span>, num2str(10.^c' ./ (milli()*darcy())));
+</pre><img vspace="5" hspace="5" src="simpleBCMS_01.png" alt=""> <h2>Partition the grid<a name="2"></a></h2>
+         <p>We partition the fine grid into a regular Nx-by-Ny-by-Nz coarse grid in index space so that each coarse block holds (nx/Nx)-by-(ny/Ny)-by-(nz/Nz)
+            fine cells. The resulting vector p has one entry per fine-grid cell giving the index of the corresponding coarse block. After
+            the grid is partitioned in index space, we postprocess it to make sure that all blocks consist of a connected set of fine
+            cells. This step is superfluous for Cartesian grids, but is required for grids that are only logically Cartesian (e.g., corner-point
+            and other mapped grids that may contain inactive or degenerate cells).
+         </p><pre class="codeinput">p  = partitionUI(G, [Nx, Ny, Nz]);
+p  = processPartition(G, p, <span class="string">'Verbose'</span>, verbose);
+
+<span class="comment">% Plot the partition</span>
+figure;
+plotCellData(G,mod(p,2)); shading <span class="string">faceted</span>;
+view(3); axis <span class="string">equal</span> <span class="string">tight</span> <span class="string">off</span>;
+</pre><pre class="codeoutput">Elapsed time is 0.064037 seconds.
+</pre><img vspace="5" hspace="5" src="simpleBCMS_02.png" alt=""> <p>Having obtain a partitioning in which each coarse block is a connected collection of cells from the fine grid, we build the
+            coarse-grid structure, which is quite similar to that of the fine grid
+         </p><pre class="codeinput">CG = generateCoarseGrid(G, p, <span class="string">'Verbose'</span>, verbose);
+display(CG); disp(CG.cells); disp(CG.faces);
+</pre><pre class="codeoutput">Generating coarse grid ... Elapsed time is 0.004278 seconds.
+
+CG = 
+
+        cells: [1x1 struct]
+        faces: [1x1 struct]
+    cellFaces: [300x2 int32]
+
+         num: 50
+    subCells: [400x50 logical]
+
+          num: 195
+    neighbors: [195x2 uint32]
+          tag: [195x1 int32]
+
+</pre><h2>Assemble linear systems<a name="4"></a></h2>
+         <p>First we assemble the linear system for the fine-scale equations</p><pre class="codeinput">S  = assembleMimeticSystem(G, rock, <span class="string">'Verbose'</span>, verbose);
+display(S);
+</pre><pre class="codeoutput">Using inner product: 'ip_simple'.
+Computing component matrices C and D ... Elapsed time is 0.000735 seconds.
+Computing cell inner products ... Elapsed time is 0.031358 seconds.
+Assembling global inner product matrix ... Elapsed time is 0.000612 seconds.
+
+S = 
+
+        C: [2400x400 double]
+        D: [2400x1380 double]
+       BI: [2400x2400 double]
+       ip: 'ip_simple'
+     type: 'hybrid'
+    sizeB: [2400 2400]
+    sizeC: [2400 400]
+    sizeD: [2400 1380]
+
+</pre><p>We generate the coarse-scale system by solving local flow problems,</p>
+         <p><img src="simpleBCMS_eq04551.png" alt="$$\nabla\cdot \psi_{ij} = \left\{\begin{array}{rcl}                               w_i(x), &amp; &amp; x\in\Omega_i \\                              \textbf{--}w_i(x), &amp; &amp; x\in\Omega_j                            \end{array}\right.,    \qquad \psi_{ij}=-\frac{K}{\mu}\nabla \phi_{ij},$$"></p>
+         <p>one for each interface in the coarse grid. The basis functions for velocity and pressure are stored in two matrices. Unlike
+            the fine-grid system, the B part of the hybrid system is not formed explicitly as a matrix block but constructed as a matrix
+            product in our flow solver:
+         </p>
+         <p><img src="simpleBCMS_eq67248.png" alt="$$ A x = \left[\begin{array}{ccc}                  \Psi^T B_f\Psi &amp; C &amp; D \\ C' &amp; 0 &amp; 0 \\ D' &amp; 0 &amp; 0           \end{array}\right]           \left[\begin{array}{c} v \\ \textbf{--}p \\ \lambda \end{array}\right]         = [\mbox{RHS}] = b, $$"></p>
+         <p>where B_f is the fine-scale B-block and \Psi contains the basis functions. In the structure, we store B\Psi rather than \Psi</p><pre class="codeinput">CS = generateCoarseSystem(G, rock, S, CG, ones([G.cells.num, 1]), <span class="keyword">...</span>
+                          <span class="string">'Verbose'</span>, verbose, <span class="string">'bc'</span>, bc);
+display(CS);
+</pre><pre class="codeoutput">Computing flux and pressure basis functions... Elapsed time is 0.327776 seconds.
+
+CS = 
+
+                  C: [300x50 double]
+                  D: [300x195 double]
+              basis: {195x1 cell}
+             basisP: {195x1 cell}
+     basisWeighting: 'perm'
+        activeFaces: [125x1 double]
+    activeCellFaces: [230x1 double]
+               type: 'hybrid'
+              sizeB: [300 300]
+              sizeC: [300 50]
+              sizeD: [300 195]
+
+</pre><p>The linear hybrid system for the coarse-scale equations has a similar structure as the corresponding fine-scale system, but
+            with significantly fewer unknowns.
+         </p><pre class="codeinput">fm = figure;
+subplot(1,2,1),
+   spy([S.BI                  , S.C        , S.D        ; <span class="keyword">...</span>
+        S.C', zeros(S.sizeC(2), S.sizeC(2) + S.sizeD(2)); <span class="keyword">...</span>
+        S.D', zeros(S.sizeD(2), S.sizeC(2) + S.sizeD(2))]);
+   title(<span class="string">'Hybrid fine-scale system'</span>)
+<span class="comment">%{
+</span><span class="comment">subplot(1,2,2),
+</span><span class="comment">   spy([CS.basis'*S.BI*CS.basis , CS.C        , CS.D        ; ...
+</span><span class="comment">        CS.C', zeros(CS.sizeC(2), CS.sizeC(2) + CS.sizeD(2)); ...
+</span><span class="comment">        CS.D', zeros(CS.sizeD(2), CS.sizeC(2) + CS.sizeD(2))]);
+</span><span class="comment">   title('Hybrid coarse-scale system');
+</span><span class="comment">   %}</span>
+</pre><img vspace="5" hspace="5" src="simpleBCMS_03.png" alt=""> <h2>Solve the global flow problems<a name="7"></a></h2><pre class="codeinput">[xrRef, xwRef] = solveIncompFlow  (initResSol(G, 0.0),   <span class="keyword">...</span>
+                                   initWellSol([], 0.0), <span class="keyword">...</span>
+                                   G, S, fluid, <span class="keyword">...</span>
+                                   <span class="string">'bc'</span>, bc, <span class="string">'MatrixOutput'</span>,true);
+[xrMs , xwMs ] = solveIncompFlowMS(initResSol(G, 0.0),      <span class="keyword">...</span>
+                                   initWellSol([], 0.0),    <span class="keyword">...</span>
+                                   G, CG, p, S, CS, fluid,  <span class="keyword">...</span>
+                                   <span class="string">'bc'</span>, bc, <span class="string">'MatrixOutput'</span>,true, <span class="keyword">...</span>
+                                   <span class="string">'Solver'</span>, <span class="string">'mixed'</span>);
+</pre><h2>Plot solution<a name="8"></a></h2><pre class="codeinput">f = figure;
+plot_var  = @(x) plotCellData(G, x);
+plot_pres = @(x) plot_var(            convertTo(x.cellPressure, barsa()));
+plot_flux = @(x) plot_var(S.C.' * abs(convertTo(x.cellFlux, meter^3/day)));
+subplot(2,2,1)
+   plot_pres(xrRef); title(<span class="string">'Pressure Fine [bar]'</span>)
+   view(3), camproj <span class="string">perspective</span>, axis <span class="string">tight</span> <span class="string">equal</span>, camlight <span class="string">headlight</span>
+   cax = caxis; colorbar
+
+subplot(2,2,2)
+   plot_pres(xrMs); title(<span class="string">'Pressure Coarse [bar]'</span>)
+   view(3), camproj <span class="string">perspective</span>, axis <span class="string">tight</span> <span class="string">equal</span>, camlight <span class="string">headlight</span>
+   caxis(cax); colorbar
+
+subplot(2,2,3)
+   plot_flux(xrRef); title(<span class="string">'Flux intensity Fine'</span>)
+   view(3), camproj <span class="string">perspective</span>, axis <span class="string">tight</span> <span class="string">equal</span>, camlight <span class="string">headlight</span>
+   cax2 = caxis; colorbar
+
+subplot(2,2,4)
+   plot_flux(xrMs); title(<span class="string">'Flux intensity Coarse'</span>)
+   view(3), camproj <span class="string">perspective</span>, axis <span class="string">tight</span> <span class="string">equal</span>, camlight <span class="string">headlight</span>
+   caxis(cax2); colorbar
+</pre><img vspace="5" hspace="5" src="simpleBCMS_04.png" alt=""> <h2>Plot Schur complement matrices<a name="9"></a></h2><pre class="codeinput">figure;
+   subplot(1,2,1); spy(xrRef.A); title(<span class="string">'Schur complement matrix, fine scale'</span>);
+   subplot(1,2,2); spy(xrMs.A);  title(<span class="string">'Schur complement matrix, coarse scale'</span>);
+</pre><img vspace="5" hspace="5" src="simpleBCMS_05.png" alt=""> <p>$Id: simpleBCMS.m 1714 2009-03-13 18:06:49Z bska $</p>
+         <p class="footer"><br>
+            Published with MATLAB&reg; 7.7<br></p>
+      </div>
+      <!--
+##### SOURCE BEGIN #####
+%% Multiscale Pressure Solver: Flow Driven by Dirichlet and Neumann Boundary Conditions
+% Compare the fine-grid and the multiscale pressure solver by solving the
+% single-phase pressure equation
+%
+% $$\nabla\cdot v = q, \qquad v=\textbf{REPLACE_WITH_DASH_DASH}\frac{K}{\mu}\nabla p,$$
+%
+% for a Cartesian grid with lognormal, anisotropic permeability. This
+% example is built upon <simpleBC.html>.
+
+
+%% Define and visualize the model
+% We construct the Cartesian grid, set a lognormal anisotropic
+% permeability with mean equal [1000 100 10] mD, and use the default
+% single-phase fluid with unit viscosity
+verbose = true;
+nx = 10; ny = 10; nz = 4;
+Nx =  5; Ny =  5; Nz = 2;
+
+G         = cartGrid([nx, ny, nz]);
+G         = computeGeometry(G);
+K         = logNormLayers([nx, ny, nz], 1); K = 100 * K / mean(K(:));
+rock.perm = bsxfun(@times, [10, 1, 0.1], K .* milli()*darcy());
+fluid     = initSingleFluid();
+gravity off
+
+% Set boundary conditions: a flux of 1 m^3/day on the global left-hand
+% side Dirichlet boundary conditions p = 0 on the global right-hand side of
+% the grid, respectively.
+bc = fluxside([], G, 'LEFT',  1:ny, 1:nz, 1*meter()^3/day());
+bc = pside   (bc, G, 'RIGHT', 1:ny, 1:nz,         0        );
+
+% After the grid structure is generated, we plot the permeability and the
+% geometry
+figure;
+   plotCellData(G,log10(rock.perm(:,1)) ); shading faceted;
+   title('Log_{10} of x-permeability [mD]');
+   view(3), camproj perspective, axis tight off
+   h = colorbar; c = round(caxis); c = c(1) : c(2);
+   set(h, 'YTick', c, 'YTickLabel', num2str(10.^c' ./ (milli()*darcy())));
+
+
+%% Partition the grid
+% We partition the fine grid into a regular Nx-by-Ny-by-Nz coarse grid in
+% index space so that each coarse block holds (nx/Nx)-by-(ny/Ny)-by-(nz/Nz)
+% fine cells. The resulting vector p has one entry per fine-grid cell
+% giving the index of the corresponding coarse block. After the grid is
+% partitioned in index space, we postprocess it to make sure that all
+% blocks consist of a connected set of fine cells. This step is superfluous
+% for Cartesian grids, but is required for grids that are only logically
+% Cartesian (e.g., corner-point and other mapped grids that may contain
+% inactive or degenerate cells).
+p  = partitionUI(G, [Nx, Ny, Nz]);
+p  = processPartition(G, p, 'Verbose', verbose);
+
+% Plot the partition
+figure;
+plotCellData(G,mod(p,2)); shading faceted;
+view(3); axis equal tight off;
+
+%%
+% Having obtain a partitioning in which each coarse block is a connected
+% collection of cells from the fine grid, we build the coarse-grid
+% structure, which is quite similar to that of the fine grid
+CG = generateCoarseGrid(G, p, 'Verbose', verbose);
+display(CG); disp(CG.cells); disp(CG.faces);
+
+
+%% Assemble linear systems
+% First we assemble the linear system for the fine-scale equations
+S  = assembleMimeticSystem(G, rock, 'Verbose', verbose);
+display(S);
+
+%%
+% We generate the coarse-scale system by solving local flow problems,
+%
+% $$\nabla\cdot \psi_{ij} = \left\{\begin{array}{rcl}
+%                               w_i(x), & & x\in\Omega_i \\
+%                              \textbf{REPLACE_WITH_DASH_DASH}w_i(x), & & x\in\Omega_j
+%                            \end{array}\right.,
+%    \qquad \psi_{ij}=-\frac{K}{\mu}\nabla \phi_{ij},$$
+%
+% one for each interface in the coarse grid. The basis functions for
+% velocity and pressure are stored in two matrices. Unlike the fine-grid
+% system, the B part of the hybrid system is not formed explicitly as a
+% matrix block but constructed as a matrix product in our flow solver:
+%
+% $$ A x = \left[\begin{array}{ccc}
+%                  \Psi^T B_f\Psi & C & D \\ C' & 0 & 0 \\ D' & 0 & 0
+%           \end{array}\right]
+%           \left[\begin{array}{c} v \\ \textbf{REPLACE_WITH_DASH_DASH}p \\ \lambda \end{array}\right]
+%         = [\mbox{RHS}] = b, $$
+%
+% where B_f is the fine-scale B-block and \Psi contains the basis
+% functions. In the structure, we store B\Psi rather than \Psi
+%
+CS = generateCoarseSystem(G, rock, S, CG, ones([G.cells.num, 1]), ...
+                          'Verbose', verbose, 'bc', bc);
+display(CS);
+
+%%
+% The linear hybrid system for the coarse-scale equations has a similar
+% structure as the corresponding fine-scale system, but with significantly
+% fewer unknowns.
+fm = figure;
+subplot(1,2,1),
+   spy([S.BI                  , S.C        , S.D        ; ...
+        S.C', zeros(S.sizeC(2), S.sizeC(2) + S.sizeD(2)); ...
+        S.D', zeros(S.sizeD(2), S.sizeC(2) + S.sizeD(2))]);
+   title('Hybrid fine-scale system')
+%{
+subplot(1,2,2),
+   spy([CS.basis'*S.BI*CS.basis , CS.C        , CS.D        ; ...
+        CS.C', zeros(CS.sizeC(2), CS.sizeC(2) + CS.sizeD(2)); ...
+        CS.D', zeros(CS.sizeD(2), CS.sizeC(2) + CS.sizeD(2))]);
+   title('Hybrid coarse-scale system');
+   %}
+
+
+%% Solve the global flow problems
+[xrRef, xwRef] = solveIncompFlow  (initResSol(G, 0.0),   ...
+                                   initWellSol([], 0.0), ...
+                                   G, S, fluid, ...
+                                   'bc', bc, 'MatrixOutput',true);
+[xrMs , xwMs ] = solveIncompFlowMS(initResSol(G, 0.0),      ...
+                                   initWellSol([], 0.0),    ...
+                                   G, CG, p, S, CS, fluid,  ...
+                                   'bc', bc, 'MatrixOutput',true, ...
+                                   'Solver', 'mixed');
+
+%% Plot solution
+f = figure;
+plot_var  = @(x) plotCellData(G, x);
+plot_pres = @(x) plot_var(            convertTo(x.cellPressure, barsa()));
+plot_flux = @(x) plot_var(S.C.' * abs(convertTo(x.cellFlux, meter^3/day)));
+subplot(2,2,1)
+   plot_pres(xrRef); title('Pressure Fine [bar]')
+   view(3), camproj perspective, axis tight equal, camlight headlight
+   cax = caxis; colorbar
+
+subplot(2,2,2)
+   plot_pres(xrMs); title('Pressure Coarse [bar]')
+   view(3), camproj perspective, axis tight equal, camlight headlight
+   caxis(cax); colorbar
+
+subplot(2,2,3)
+   plot_flux(xrRef); title('Flux intensity Fine')
+   view(3), camproj perspective, axis tight equal, camlight headlight
+   cax2 = caxis; colorbar
+
+subplot(2,2,4)
+   plot_flux(xrMs); title('Flux intensity Coarse')
+   view(3), camproj perspective, axis tight equal, camlight headlight
+   caxis(cax2); colorbar
+
+%% Plot Schur complement matrices
+figure;
+   subplot(1,2,1); spy(xrRef.A); title('Schur complement matrix, fine scale');
+   subplot(1,2,2); spy(xrMs.A);  title('Schur complement matrix, coarse scale');
+
+%%
+% $Id: simpleBCMS.m 1714 2009-03-13 18:06:49Z bska $
+
+##### SOURCE END #####
+-->
+   </body>
+</html>

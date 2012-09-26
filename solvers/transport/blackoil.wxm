@@ -1,0 +1,42 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+
+/* [wxMaxima: input   start ] */
+B:matrix([BL(p),0,0],[0,BV(p),0],[0,0,BA(p)]);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+R:matrix([1,RV(p),0],[RL(p),1,0],[0,0,1]);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+e:matrix([1],[1],[1]);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+rho:invert(B).transpose(R);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+-diff(rho,p).invert(rho).e;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+ratsimp(%);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+R:matrix([1,RV(p),0],[RL(p),1,RA(p)],[0,0,1]);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+rho:invert(B).transpose(R);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+-diff(rho,p).invert(rho).e;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+ratsimp(%);
+/* [wxMaxima: input   end   ] */
+

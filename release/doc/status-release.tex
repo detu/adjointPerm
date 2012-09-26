@@ -1,0 +1,358 @@
+\documentclass[11pt,twoside,UKenglish]{scrartcl}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp,listings,fancyhdr,babel}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+
+\newcommand{\sintef}  {\textsc{sintef}}
+\newcommand{\SINTEF}  {\textsc{SINTEF}}
+\newcommand{\SAM}     {{\SINTEF} Applied Mathematics}
+\newcommand{\svnrev}  {${}$Revision: 1167 ${}$}
+\newcommand{\svndate} {${}$Date: 2009-01-07 19:27:46 +0100 (on, 07 jan 2009) ${}$}
+\newcommand{\matlab}  {\textsc{matlab}}
+\newcommand{\MATLAB}  {\textsc{MATLAB}}
+\newcommand{\rstroot} {\texttt{\$RSTROOT}}
+\newcommand{\matlabtm}{\matlab\texttrademark}
+\newcommand{\Emacs}   {\textsc{Emacs}}
+
+% Various definitions pertaining to MATLAB
+%
+\newcommand{\MATLABKeyword}[1]{\texttt{#1}}
+\newcommand{\FileName}     [1]{\texttt{#1}}
+\newcommand{\FunctionName} [1]{\texttt{#1}}
+\newcommand{\function}        {\MATLABKeyword{function}}
+
+\pagestyle{fancy}
+\lstset{upquote}
+
+\fancyhead{}
+\fancyhead[RO,LE]{\thepage}
+\fancyhead[LO,RE]{Coding Conventions}
+
+\fancyfoot{}
+\fancyfoot[LE]{\svnrev}
+\fancyfoot[LO,R]{}
+
+% Don't number any section headings.
+\setcounter{secnumdepth}{-2}
+
+\title {State of {\MATLAB}\\Reservoir Simulation Toolbox}
+\author{{\SAM}}
+\date{\svndate}
+
+\begin{document}
+\maketitle\thispagestyle{empty}
+\section{Toolbox Modules}
+\label{sec:modules}
+This section briefly lists and briefly describes the files constituting
+the current implementation of the toolbox.  One section is devoted to
+each module.
+
+\subsection{\texttt{doc}}
+\label{sec:modules:doc}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose}                                   \\\hline
+    \FileName{samsimgrid.m}       & Describe grid structure of RST \\
+    \FileName{status-release.pdf} & This document                  \\\hline
+  \end{tabular}
+\end{center}
+
+\iffalse
+\subsection{\texttt{examples}}
+\label{sec:modules:examples}
+\begin{verbatim}
+Contents.m
+em-2008
+fractures
+johansen
+model3
+pinch
+simpleNUC
+\end{verbatim}
+\fi
+
+\subsection{\texttt{fluid}}
+\label{sec:modules:fluid}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{Data}              & Directory containing black oil PVT
+                                   and rel-perm data \\
+    \FileName{initSimpleFluid.m} & Initialize incompressible two-phase
+                                   fluid model \\
+    \FileName{evalpvt.m}         & Evaluate black oil compressibility
+                                   and related parameters \\
+    \FileName{getRelPerm.m}      & Compute saturation-dependent black
+                                   oil rel-perm curves \\
+    \FileName{pvt.m}             & Compute composite black oil parameters
+                                 \\\hline
+  \end{tabular}
+\end{center}
+\begin{verbatim}
+\end{verbatim}
+
+\subsection{\texttt{gridprocessing}}
+\label{sec:modules:gridprocessing}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{cartGrid.m}           & Construct Cartesian grid in
+                                      physical space \\
+    \FileName{tensorGrid.m}         & Construct variably sized Cartesian
+                                      grid in physical space \\
+    \FileName{buildCornerPtNodes.m} & Construct physical nodal
+                                      coordinates for corner-point grid
+                                      \\
+    \FileName{processGRDECL.m}      & Construct general grid from raw
+                                      corner-point description \\
+    \FileName{computeGeometry.m}    & Compute basic geometric
+                                      information in grid \\\hline
+  \end{tabular}
+\end{center}
+
+\subsection{\texttt{inout}}
+\label{sec:modules:inout}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{readGRDECL.m} & Read \FileName{GRDECL} file assuming
+                              corner-point format \\
+    \FileName{readPARAMS.m} & Read \FileName{ECLIPSE} or
+                              \FileName{FrontSim} deck file \\
+    \FileName{readpvt.m}    & Read black oil PVT data from
+                              \FileName{ECLIPSE} deck \\
+    \FileName{readVector.m} & Input vector of floating point numbers
+                              from \FileName{ECLISPE} deck \\\hline
+  \end{tabular}
+\end{center}
+
+\subsection{\texttt{mex}}
+\label{sec:modules:mex}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{reorder-C} & Directory containing a \textsl{C}
+                           implementation of the reorder technique
+                           \\\hline
+  \end{tabular}
+\end{center}
+
+\subsection{\texttt{pressure}}
+\label{sec:modules:pressure}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{assembleMimeticSystem.m} & Construct pressure system
+                                         components \\
+    \FileName{initResSol.m} & Initialize reservoir solution structure \\
+    \FileName{initWellSol.m} & Initialize well solution structure \\
+    \FileName{solveIncompFlow.m} & Solve incompressible flow/pressure problem \\
+    \FileName{solveBlackOilWellSystem.m} & Single iteration on
+                                           BO pressure system \\
+    \FileName{solveCoarsePsysBO.m} & Single iteration on coarsened BO
+                                     system \\
+    \FileName{updateBlackOilMimeticSystem.m} & Update reservoir dynamic
+                                               components \\
+    \FileName{updateBlackOilWellSystem.m} & Update well dynamic
+                                            components \\
+    \FileName{mixedSymm.m} & Solve symmetric mixed linear system \\
+    \FileName{tpfSymm.m} & Solve symmetric TPFA linear system \\
+    \FileName{schurComplement.m} & Solve non-symmetric hybrid linear
+                                   system \\
+    \FileName{schurComplementSymm.m} & Solve symmetric hybrid linear
+                                       system \\\hline
+  \end{tabular}
+\end{center}
+
+
+\subsection{\texttt{plotting}}
+\label{sec:modules:plotting}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{outlineCoarseGrid.m} & Impose outline of coarse grid on
+                                     plot \\
+    \FileName{plotCellData.m} & Plot volume data, constant in each cell \\
+    \FileName{plotFaceData.m} & Plot data constant on each face \\
+    \FileName{plotFaces.m} & Plot geometric faces of a model \\
+    \FileName{plotGrid.m} & Plot cells and faces of a grid \\
+    \FileName{plotInterpCellData.m} & Plot smoothed/interpolated volume
+                                      data \\
+    \FileName{plotWell.m} & Plot well trajectories \\\hline
+  \end{tabular}
+\end{center}
+
+
+\subsection{\texttt{transport}}
+\label{sec:modules:transport}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{blackoilJacobian.m} & \\
+    \FileName{blackoilUpwBE.m} & \\
+    \FileName{blackoilUpwFE.m} & \\
+    \FileName{findFaceMobMat.m} & \\
+    \FileName{implicitBlackOil.m} & \\
+    \FileName{implicitupwind.mexa64} & \\
+    \FileName{inflow\_bo.m} & \\
+    \FileName{inflow\_inc.m} & \\
+    \FileName{inflow.m} & \\
+    \FileName{initFaceMob.m} & \\
+    \FileName{newtonRaphson.m} & \\
+    \FileName{reorder\_compressible\_twophase.m} & \\
+    \FileName{reorder\_incompressible\_twophase.m} & \\
+    \FileName{twophaseUpwBEGrav.m} & \\
+    \FileName{twophaseUpwBE.m} & \\
+    \FileName{twophaseUpwFEGrav.m} & \\
+    \FileName{twophaseUpwFE.m} & \\
+    \FileName{twophaseUpwReorder.m} & \\\hline
+  \end{tabular}
+\end{center}
+
+
+\subsection{\texttt{multiscale}}
+\label{sec:modules:multiscale}
+\begin{center}
+  \begin{tabular}{|l|l|}\hline
+    \emph{File} & \emph{Purpose} \\\hline
+    \FileName{assignBasisFuncs.m} & Update coarse system basis function
+                                    fields \\
+    \FileName{compressPartition.m} & Remove empty coarse blocks \\
+    \FileName{evalBasisFunc.m} & Evaluate reservoir basis functions \\
+    \FileName{evalWellBasis.m} & Evaluate well basis functions \\
+    \FileName{generateCoarseGrid.m} & Construct coarse grid structure \\
+    \FileName{generateCoarseSystem.m} & Construct coarse system
+                                        structure \\
+    \FileName{generateMixedBasis.m} & Evaluate mixed-system reservoir
+                                      basis functions \\
+    \FileName{partitionCartGrid.m} & Partition a Cartesian grid in index
+                                     space \\
+    \FileName{partitionUI.m} & Partition existing grid uniformly in
+                               index space \\
+    \FileName{processPartition.m} & Split non-connected coarse blocks \\\hline
+  \end{tabular}
+\end{center}
+
+\iffalse
+\subsection{\texttt{regression}}
+\label{sec:modules:regression}
+\begin{verbatim}
+html
+Kx.mat
+prevCases.mat
+prevRes.mat
+runAnalysis.m
+tests
+writeSummary.m
+\end{verbatim}
+\fi
+
+\iffalse
+\subsection{\texttt{tests}}
+\label{sec:modules:tests}
+\begin{verbatim}
+blackOilQuarterFiveSpot.m
+blackOilQuarterFiveSpotMS.m
+blackOilTube.m
+blackOilTubeMS.m
+blackOilTubeTPF.m
+comp_mimetic_1d.m
+Contents.m
+gravityColumn.m
+gravityColumnMS.m
+horizontalWellOverlap.m
+mimetic_mixed_tpf.m
+readSimGridExample.m
+simpleBC.m
+simpleBlackOil.m
+simpleCartGridExample.m
+simpleEclipseFileExample.m
+simpleMSBCExample.m
+simpleMSExample.m
+simpleMSSourceExample.m
+simpleOverlap.m
+simpleWellExample.m
+twophaseGravColumn.m
+twophaseGravVertical.m
+twophaseQuarterFiveSpotExp.m
+twophaseQuarterFiveSpotGravityColumn.m
+twophaseQuarterFiveSpotGrav.m
+twophaseQuarterFiveSpot.m
+\end{verbatim}
+\fi
+
+\subsection{\texttt{utils}}
+\label{sec:modules:utils}
+\begin{verbatim}
+boundaryFaceIndices.m
+cacheDir.m
+cellFlux2faceFlux.m
+cellNodes.m
+coarse2fineFace.m
+coarse2fine.m
+dispif.m
+exportWorkspace.m
+faceFlux2cellFlux.m
+fluxside.m
+hash.m
+mcolon.m
+md5sum.c
+md5sum.m
+md5sum.mexa64
+merge_options.m
+mimeticSysRHS.m
+neighboursByNodes.m
+nodeCells.m
+poreVolume.m
+pside.m
+readCache.m
+rldecode.m
+rlencode.m
+subFaces.m
+tocif.m
+trilinos.m
+twister.m
+writeCache.m
+\end{verbatim}
+
+\subsection{\texttt{wells}}
+\label{sec:modules:wells}
+\begin{verbatim}
+addBC.m
+addSource.m
+assembleWellSystem.m
+Contents.m
+generateCoarseWellSystem.m
+generateMixedWellBasis.m
+generateWellBasis.m
+packageWellSol.m
+putBC.m
+putBCMS.m
+putSource.m
+putSourceMS.m
+putWellGeneral.m
+putWell.m
+rmBC.m
+rmSource.m
+rmSourceMS.m
+solveMixedWellSystem.m
+solveMixedWellSystemMS.m
+solveWellSystem.m
+solveWellSystemMS.m
+solveWellSystemOld.m
+unpackMixedWellSystemComponents.m
+unpackWellSystemComponents.m
+unpackWellSystemComponentsMS.m
+verticalWell.m
+\end{verbatim}
+\end{document}
+
+
+%%% Local Variables:
+%%% mode:LaTeX
+%%% TeX-master:t
+%%% fill-column:72
+%%% End:
+
+% vim: si et tw=72 sw=2 fo=tcroql com=b\:\%
