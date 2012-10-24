@@ -45,7 +45,8 @@
     clear grdecl
 
     % Rock properties
-    load([ROOTDIR 'examples\data\randomgauss21x21_spherical1000_conditioned.mat']);
+    %load([ROOTDIR 'examples\data\randomgauss21x21_spherical1000_conditioned.mat']);
+    load('randomgauss21x21_spherical1000_conditioned.mat');
     
     for i=1:max(1,ne)
         perm(:,i) = K(:,i);
